@@ -97,24 +97,22 @@ const loginUser = async (req, res) => {
 
 const registerUser = async (req, res) => {
     try {
-        let {
-            name,
-            phone,
-            password,
-        } = req.body;
+        console.log("========== REGISTER START ==========");
+        console.log("Request body:", {
+            name: req.body.name,
+            phone: req.body.phone,
+            passwordProvided: !!req.body.password,
+        });
 
-        console.log("========== REGISTER REQUEST ==========");
-        console.log("Name:", name);
-        console.log("Phone:", phone);
-        console.log("Password provided:", !!password);
-        console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
-        console.log("======================================");
+        let { name, phone, password } = req.body;
 
         // Required fields
         if (!name || !phone || !password) {
+            console.log("REGISTER FAILED: Missing fields");
+
             return res.status(400).json({
                 success: false,
-                message: "All fields are required",
+                message: "Name, phone number and password are required",
             });
         }
 
@@ -122,6 +120,12 @@ const registerUser = async (req, res) => {
         name = String(name).trim();
         phone = String(phone).trim();
         password = String(password);
+
+        console.log("Cleaned data:", {
+            name,
+            phone,
+            passwordProvided: !!password,
+        });
 
         // Validate name
         if (name.length < 2) {
@@ -149,8 +153,12 @@ const registerUser = async (req, res) => {
             });
         }
 
+        console.log("Validation passed");
+
         // Check existing user
         const exists = await userModel.findOne({ phone });
+
+        console.log("Existing user:", !!exists);
 
         if (exists) {
             return res.status(409).json({
@@ -161,12 +169,14 @@ const registerUser = async (req, res) => {
         }
 
         // Hash password
-        const salt = await bcrypt.genSalt(10);
+        console.log("Hashing password...");
 
         const hashedPassword = await bcrypt.hash(
             password,
-            salt
+            10
         );
+
+        console.log("Password hashed");
 
         // Create user
         const newUser = new userModel({
@@ -175,19 +185,23 @@ const registerUser = async (req, res) => {
             password: hashedPassword,
         });
 
+        console.log("User object created");
+
+        // Save
         const user = await newUser.save();
 
         console.log(
-            "USER CREATED SUCCESSFULLY:",
+            "USER SAVED SUCCESSFULLY:",
             user._id
         );
 
-        // Create JWT
+        // JWT
         const token = createToken(user._id);
 
         console.log("JWT CREATED SUCCESSFULLY");
 
-        // Final response
+        console.log("========== REGISTER SUCCESS ==========");
+
         return res.status(201).json({
             success: true,
             message: "Registration successful",
@@ -195,15 +209,15 @@ const registerUser = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("================================");
-        console.error("REGISTER ERROR:");
-        console.error(error);
-        console.error("================================");
+        console.error("========== REGISTER ERROR ==========");
+        console.error("Name:", error.name);
+        console.error("Message:", error.message);
+        console.error("Stack:", error.stack);
+        console.error("====================================");
 
         return res.status(500).json({
             success: false,
-            message:
-                error.message || "Registration failed",
+            message: error.message || "Registration failed",
         });
     }
 };
