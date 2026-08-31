@@ -1,167 +1,61 @@
-import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
-import userModel from "../models/userModel.js";
-
-// ----------------------------------------------------
-// Create token
-// ----------------------------------------------------
-
-const createToken = (id) => {
-
-    return jwt.sign(
-        { id },
-        process.env.JWT_SECRET,
-        {
-            expiresIn: "7d"
-        }
-    );
-
-};
-
-
-// ----------------------------------------------------
-// Login user
-// ----------------------------------------------------
-
-const loginUser = async (req, res) => {
-
-    const { phone, password } = req.body;
-
-    try {
-
-        // Check if phone and password were provided
-
-        if (!phone || !password) {
-
-            return res.json({
-                success: false,
-                message: "Phone number and password are required"
-            });
-
-        }
-
-
-        // Find user
-
-        const user = await userModel.findOne({ phone });
-
-        if (!user) {
-
-            return res.json({
-                success: false,
-                message: "User does not exist"
-            });
-
-        }
-
-
-        // Compare password
-
-        const isMatch = await bcrypt.compare(
-            password,
-            user.password
-        );
-
-        if (!isMatch) {
-
-            return res.json({
-                success: false,
-                message: "Invalid phone number or password"
-            });
-
-        }
-
-
-        // Create token
-
-        const token = createToken(user._id);
-
-
-        // Send response
-
-        res.json({
-            success: true,
-            token
-        });
-
-    } catch (error) {
-
-        console.log("LOGIN ERROR:", error);
-
-        res.json({
-            success: false,
-            message: error.message
-        });
-
-    }
-
-};
-
-
-// ----------------------------------------------------
-// Register user
-// ----------------------------------------------------
-
 const registerUser = async (req, res) => {
-
-    const { name, phone, password } = req.body;
-
     try {
+        let { name, phone, password } = req.body;
+
+        console.log("REGISTER REQUEST:", {
+            name,
+            phone,
+            passwordProvided: !!password
+        });
 
         // Check required fields
-
         if (!name || !phone || !password) {
-
-            return res.json({
+            return res.status(400).json({
                 success: false,
                 message: "All fields are required"
             });
-
         }
 
+        // Clean values
+        name = String(name).trim();
+        phone = String(phone).trim();
+        password = String(password);
 
-        // Check whether user already exists
-
-        const exists = await userModel.findOne({
-            phone
-        });
-
-        if (exists) {
-
-            return res.json({
+        // Validate name
+        if (name.length < 2) {
+            return res.status(400).json({
                 success: false,
-                message: "User already exists"
+                message: "Please enter a valid name"
             });
-
         }
-
 
         // Validate phone
-
         if (phone.length < 9) {
-
-            return res.json({
+            return res.status(400).json({
                 success: false,
                 message: "Please enter a valid phone number"
             });
-
         }
 
-
         // Validate password
-
         if (password.length < 8) {
-
-            return res.json({
+            return res.status(400).json({
                 success: false,
                 message: "Password must contain at least 8 characters"
             });
-
         }
 
+        // Check existing user
+        const exists = await userModel.findOne({ phone });
 
-        // Encrypt password
+        if (exists) {
+            return res.status(409).json({
+                success: false,
+                message: "User already exists"
+            });
+        }
 
+        // Hash password
         const salt = await bcrypt.genSalt(10);
 
         const hashedPassword = await bcrypt.hash(
@@ -169,46 +63,36 @@ const registerUser = async (req, res) => {
             salt
         );
 
-
         // Create user
-
         const newUser = new userModel({
             name,
             phone,
             password: hashedPassword
         });
 
-
         const user = await newUser.save();
 
+        console.log("USER CREATED:", user._id);
 
-        // Create token
-
+        // Create JWT
         const token = createToken(user._id);
 
-
-        // Send response
-
-        res.json({
+        return res.status(201).json({
             success: true,
+            message: "Registration successful",
             token
         });
 
     } catch (error) {
 
-        console.log("REGISTER ERROR:", error);
+        console.error("================================");
+        console.error("REGISTER ERROR:");
+        console.error(error);
+        console.error("================================");
 
-        res.json({
+        return res.status(500).json({
             success: false,
-            message: error.message
+            message: error.message || "Registration failed"
         });
-
     }
-
-};
-
-
-export {
-    loginUser,
-    registerUser
 };
