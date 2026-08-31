@@ -1,3 +1,87 @@
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+import userModel from "../models/userModel.js";
+
+// ----------------------------------------------------
+// Create token
+// ----------------------------------------------------
+
+const createToken = (id) => {
+    return jwt.sign(
+        { id },
+        process.env.JWT_SECRET,
+        {
+            expiresIn: "7d",
+        }
+    );
+};
+
+
+// ----------------------------------------------------
+// Login user
+// ----------------------------------------------------
+
+const loginUser = async (req, res) => {
+    try {
+        let { phone, password } = req.body;
+
+        // Check required fields
+        if (!phone || !password) {
+            return res.status(400).json({
+                success: false,
+                message: "Phone number and password are required",
+            });
+        }
+
+        // Clean phone number
+        phone = String(phone).trim();
+
+        // Find user
+        const user = await userModel.findOne({ phone });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User does not exist",
+            });
+        }
+
+        // Compare password
+        const isMatch = await bcrypt.compare(
+            password,
+            user.password
+        );
+
+        if (!isMatch) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid phone number or password",
+            });
+        }
+
+        // Create token
+        const token = createToken(user._id);
+
+        return res.json({
+            success: true,
+            token,
+        });
+
+    } catch (error) {
+        console.error("LOGIN ERROR:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+
+
+// ----------------------------------------------------
+// Register user
+// ----------------------------------------------------
+
 const registerUser = async (req, res) => {
     try {
         let { name, phone, password } = req.body;
@@ -95,4 +179,10 @@ const registerUser = async (req, res) => {
             message: error.message || "Registration failed"
         });
     }
+};
+
+
+export {
+    loginUser,
+    registerUser,
 };
