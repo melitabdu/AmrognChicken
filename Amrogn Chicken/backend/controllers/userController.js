@@ -2,13 +2,17 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import userModel from "../models/userModel.js";
 
-// ----------------------------------------------------
-// Create token
-// ----------------------------------------------------
+// ====================================================
+// CREATE TOKEN
+// ====================================================
 
 const createToken = (id) => {
+    if (!process.env.JWT_SECRET) {
+        throw new Error("JWT_SECRET is not configured on the server");
+    }
+
     return jwt.sign(
-        { id },
+        { id: String(id) },
         process.env.JWT_SECRET,
         {
             expiresIn: "7d",
@@ -16,16 +20,21 @@ const createToken = (id) => {
     );
 };
 
-
-// ----------------------------------------------------
-// Login user
-// ----------------------------------------------------
+// ====================================================
+// LOGIN USER
+// ====================================================
 
 const loginUser = async (req, res) => {
     try {
         let { phone, password } = req.body;
 
-        // Check required fields
+        console.log("========== LOGIN REQUEST ==========");
+        console.log("Phone:", phone);
+        console.log("Password provided:", !!password);
+        console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
+        console.log("===================================");
+
+        // Required fields
         if (!phone || !password) {
             return res.status(400).json({
                 success: false,
@@ -33,7 +42,7 @@ const loginUser = async (req, res) => {
             });
         }
 
-        // Clean phone number
+        // Clean phone
         phone = String(phone).trim();
 
         // Find user
@@ -62,41 +71,50 @@ const loginUser = async (req, res) => {
         // Create token
         const token = createToken(user._id);
 
+        console.log("LOGIN SUCCESS:", user._id);
+
+        // Response
         return res.json({
             success: true,
             token,
         });
 
     } catch (error) {
-        console.error("LOGIN ERROR:", error);
+        console.error("========== LOGIN ERROR ==========");
+        console.error(error);
+        console.error("=================================");
 
         return res.status(500).json({
             success: false,
-            message: error.message,
+            message: error.message || "Login failed",
         });
     }
 };
 
-
-// ----------------------------------------------------
-// Register user
-// ----------------------------------------------------
+// ====================================================
+// REGISTER USER
+// ====================================================
 
 const registerUser = async (req, res) => {
     try {
-        let { name, phone, password } = req.body;
-
-        console.log("REGISTER REQUEST:", {
+        let {
             name,
             phone,
-            passwordProvided: !!password
-        });
+            password,
+        } = req.body;
 
-        // Check required fields
+        console.log("========== REGISTER REQUEST ==========");
+        console.log("Name:", name);
+        console.log("Phone:", phone);
+        console.log("Password provided:", !!password);
+        console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
+        console.log("======================================");
+
+        // Required fields
         if (!name || !phone || !password) {
             return res.status(400).json({
                 success: false,
-                message: "All fields are required"
+                message: "All fields are required",
             });
         }
 
@@ -109,15 +127,16 @@ const registerUser = async (req, res) => {
         if (name.length < 2) {
             return res.status(400).json({
                 success: false,
-                message: "Please enter a valid name"
+                message: "Please enter a valid name",
             });
         }
 
-        // Validate phone
-        if (phone.length < 9) {
+        // Validate Ethiopian phone
+        if (!/^09\d{8}$/.test(phone)) {
             return res.status(400).json({
                 success: false,
-                message: "Please enter a valid phone number"
+                message:
+                    "Please enter a valid Ethiopian phone number, for example 0912345678",
             });
         }
 
@@ -125,7 +144,8 @@ const registerUser = async (req, res) => {
         if (password.length < 8) {
             return res.status(400).json({
                 success: false,
-                message: "Password must contain at least 8 characters"
+                message:
+                    "Password must contain at least 8 characters",
             });
         }
 
@@ -135,7 +155,8 @@ const registerUser = async (req, res) => {
         if (exists) {
             return res.status(409).json({
                 success: false,
-                message: "User already exists"
+                message:
+                    "A user with this phone number already exists",
             });
         }
 
@@ -151,24 +172,29 @@ const registerUser = async (req, res) => {
         const newUser = new userModel({
             name,
             phone,
-            password: hashedPassword
+            password: hashedPassword,
         });
 
         const user = await newUser.save();
 
-        console.log("USER CREATED:", user._id);
+        console.log(
+            "USER CREATED SUCCESSFULLY:",
+            user._id
+        );
 
         // Create JWT
         const token = createToken(user._id);
 
+        console.log("JWT CREATED SUCCESSFULLY");
+
+        // Final response
         return res.status(201).json({
             success: true,
             message: "Registration successful",
-            token
+            token,
         });
 
     } catch (error) {
-
         console.error("================================");
         console.error("REGISTER ERROR:");
         console.error(error);
@@ -176,13 +202,18 @@ const registerUser = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: error.message || "Registration failed"
+            message:
+                error.message || "Registration failed",
         });
     }
 };
 
+// ====================================================
+// EXPORT
+// ====================================================
 
 export {
     loginUser,
     registerUser,
+    createToken,
 };
