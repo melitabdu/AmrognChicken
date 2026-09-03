@@ -8,7 +8,9 @@ import userModel from "../models/userModel.js";
 
 const createToken = (id) => {
     if (!process.env.JWT_SECRET) {
-        throw new Error("JWT_SECRET is not configured on the server");
+        throw new Error(
+            "JWT_SECRET is not configured on the server"
+        );
     }
 
     return jwt.sign(
@@ -21,72 +23,166 @@ const createToken = (id) => {
 };
 
 // ====================================================
+// NORMALIZE ETHIOPIAN PHONE
+// ====================================================
+
+const normalizePhone = (phone) => {
+    let cleaned = String(phone || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .replace(/-/g, "");
+
+    // +251912345678 -> 0912345678
+    if (cleaned.startsWith("+251")) {
+        cleaned = `0${cleaned.substring(4)}`;
+    }
+
+    // 251912345678 -> 0912345678
+    else if (cleaned.startsWith("251")) {
+        cleaned = `0${cleaned.substring(3)}`;
+    }
+
+    return cleaned;
+};
+
+// ====================================================
 // LOGIN USER
 // ====================================================
 
 const loginUser = async (req, res) => {
     try {
-        let { phone, password } = req.body;
-
         console.log("========== LOGIN REQUEST ==========");
-        console.log("Phone:", phone);
-        console.log("Password provided:", !!password);
-        console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
+
+        // Check body
+        console.log("Request body:", {
+            phone: req.body?.phone,
+            passwordProvided: !!req.body?.password,
+        });
+
+        let { phone, password } = req.body || {};
+
+        console.log(
+            "JWT_SECRET exists:",
+            !!process.env.JWT_SECRET
+        );
+
         console.log("===================================");
 
-        // Required fields
+        // ==================================================
+        // REQUIRED FIELDS
+        // ==================================================
+
         if (!phone || !password) {
             return res.status(400).json({
                 success: false,
-                message: "Phone number and password are required",
+                message:
+                    "Phone number and password are required",
             });
         }
 
-        // Clean phone
-        phone = String(phone).trim();
+        // ==================================================
+        // CLEAN PHONE
+        // ==================================================
 
-        // Find user
-        const user = await userModel.findOne({ phone });
+        phone = normalizePhone(phone);
+
+        console.log("Normalized login phone:", phone);
+
+        // ==================================================
+        // VALIDATE PHONE
+        // ==================================================
+
+        if (!/^09\d{8}$/.test(phone)) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Please enter a valid Ethiopian phone number, for example 0912345678",
+            });
+        }
+
+        // ==================================================
+        // FIND USER
+        // ==================================================
+
+        const user = await userModel.findOne({
+            phone,
+        });
 
         if (!user) {
+            console.log(
+                "LOGIN FAILED: User does not exist"
+            );
+
             return res.status(404).json({
                 success: false,
                 message: "User does not exist",
             });
         }
 
-        // Compare password
+        console.log(
+            "User found:",
+            user._id
+        );
+
+        // ==================================================
+        // CHECK PASSWORD
+        // ==================================================
+
         const isMatch = await bcrypt.compare(
             password,
             user.password
         );
 
         if (!isMatch) {
+            console.log(
+                "LOGIN FAILED: Invalid password"
+            );
+
             return res.status(401).json({
                 success: false,
-                message: "Invalid phone number or password",
+                message:
+                    "Invalid phone number or password",
             });
         }
 
-        // Create token
+        // ==================================================
+        // CREATE TOKEN
+        // ==================================================
+
         const token = createToken(user._id);
 
-        console.log("LOGIN SUCCESS:", user._id);
+        console.log(
+            "LOGIN SUCCESS:",
+            user._id
+        );
 
-        // Response
-        return res.json({
+        // ==================================================
+        // RESPONSE
+        // ==================================================
+
+        return res.status(200).json({
             success: true,
+            message: "Login successful",
             token,
         });
 
     } catch (error) {
-        console.error("========== LOGIN ERROR ==========");
-        console.error(error);
-        console.error("=================================");
+        console.error(
+            "========== LOGIN ERROR =========="
+        );
+
+        console.error("Name:", error.name);
+        console.error("Message:", error.message);
+        console.error("Stack:", error.stack);
+
+        console.error(
+            "================================="
+        );
 
         return res.status(500).json({
             success: false,
-            message: error.message || "Login failed",
+            message:
+                error.message || "Login failed",
         });
     }
 };
@@ -97,45 +193,76 @@ const loginUser = async (req, res) => {
 
 const registerUser = async (req, res) => {
     try {
-        console.log("========== REGISTER START ==========");
+        console.log(
+            "========== REGISTER START =========="
+        );
+
+        // ==================================================
+        // CHECK REQUEST BODY
+        // ==================================================
+
         console.log("Request body:", {
-            name: req.body.name,
-            phone: req.body.phone,
-            passwordProvided: !!req.body.password,
+            name: req.body?.name,
+            phone: req.body?.phone,
+            passwordProvided:
+                !!req.body?.password,
         });
 
-        let { name, phone, password } = req.body;
+        let {
+            name,
+            phone,
+            password,
+        } = req.body || {};
 
-        // Required fields
+        // ==================================================
+        // REQUIRED FIELDS
+        // ==================================================
+
         if (!name || !phone || !password) {
-            console.log("REGISTER FAILED: Missing fields");
+            console.log(
+                "REGISTER FAILED: Missing fields"
+            );
 
             return res.status(400).json({
                 success: false,
-                message: "Name, phone number and password are required",
+                message:
+                    "Name, phone number and password are required",
             });
         }
 
-        // Clean values
+        // ==================================================
+        // CLEAN VALUES
+        // ==================================================
+
         name = String(name).trim();
-        phone = String(phone).trim();
+
+        phone = normalizePhone(phone);
+
         password = String(password);
 
         console.log("Cleaned data:", {
             name,
             phone,
-            passwordProvided: !!password,
+            passwordProvided:
+                !!password,
         });
 
-        // Validate name
+        // ==================================================
+        // VALIDATE NAME
+        // ==================================================
+
         if (name.length < 2) {
             return res.status(400).json({
                 success: false,
-                message: "Please enter a valid name",
+                message:
+                    "Please enter a valid name",
             });
         }
 
-        // Validate Ethiopian phone
+        // ==================================================
+        // VALIDATE PHONE
+        // ==================================================
+
         if (!/^09\d{8}$/.test(phone)) {
             return res.status(400).json({
                 success: false,
@@ -144,7 +271,10 @@ const registerUser = async (req, res) => {
             });
         }
 
-        // Validate password
+        // ==================================================
+        // VALIDATE PASSWORD
+        // ==================================================
+
         if (password.length < 8) {
             return res.status(400).json({
                 success: false,
@@ -153,12 +283,23 @@ const registerUser = async (req, res) => {
             });
         }
 
-        console.log("Validation passed");
+        console.log(
+            "Validation passed"
+        );
 
-        // Check existing user
-        const exists = await userModel.findOne({ phone });
+        // ==================================================
+        // CHECK EXISTING USER
+        // ==================================================
 
-        console.log("Existing user:", !!exists);
+        const exists =
+            await userModel.findOne({
+                phone,
+            });
+
+        console.log(
+            "Existing user:",
+            !!exists
+        );
 
         if (exists) {
             return res.status(409).json({
@@ -168,56 +309,146 @@ const registerUser = async (req, res) => {
             });
         }
 
-        // Hash password
-        console.log("Hashing password...");
+        // ==================================================
+        // HASH PASSWORD
+        // ==================================================
 
-        const hashedPassword = await bcrypt.hash(
-            password,
-            10
+        console.log(
+            "Hashing password..."
         );
 
-        console.log("Password hashed");
+        const hashedPassword =
+            await bcrypt.hash(
+                password,
+                10
+            );
 
-        // Create user
-        const newUser = new userModel({
-            name,
-            phone,
-            password: hashedPassword,
-        });
+        console.log(
+            "Password hashed"
+        );
 
-        console.log("User object created");
+        // ==================================================
+        // CREATE USER
+        // ==================================================
 
-        // Save
-        const user = await newUser.save();
+        const newUser =
+            new userModel({
+                name,
+                phone,
+                password:
+                    hashedPassword,
+            });
+
+        console.log(
+            "User object created"
+        );
+
+        // ==================================================
+        // SAVE USER
+        // ==================================================
+
+        const user =
+            await newUser.save();
 
         console.log(
             "USER SAVED SUCCESSFULLY:",
             user._id
         );
 
-        // JWT
-        const token = createToken(user._id);
+        // ==================================================
+        // CREATE JWT
+        // ==================================================
 
-        console.log("JWT CREATED SUCCESSFULLY");
+        const token =
+            createToken(user._id);
 
-        console.log("========== REGISTER SUCCESS ==========");
+        console.log(
+            "JWT CREATED SUCCESSFULLY"
+        );
+
+        console.log(
+            "========== REGISTER SUCCESS =========="
+        );
+
+        // ==================================================
+        // RESPONSE
+        // ==================================================
 
         return res.status(201).json({
             success: true,
-            message: "Registration successful",
+            message:
+                "Registration successful",
             token,
         });
 
     } catch (error) {
-        console.error("========== REGISTER ERROR ==========");
-        console.error("Name:", error.name);
-        console.error("Message:", error.message);
-        console.error("Stack:", error.stack);
-        console.error("====================================");
+        console.error(
+            "========== REGISTER ERROR =========="
+        );
+
+        console.error(
+            "Name:",
+            error.name
+        );
+
+        console.error(
+            "Message:",
+            error.message
+        );
+
+        console.error(
+            "Stack:",
+            error.stack
+        );
+
+        console.error(
+            "===================================="
+        );
+
+        // ==================================================
+        // DUPLICATE KEY ERROR
+        // ==================================================
+
+        if (error.code === 11000) {
+            return res.status(409).json({
+                success: false,
+                message:
+                    "A user with this phone number already exists",
+            });
+        }
+
+        // ==================================================
+        // VALIDATION ERROR
+        // ==================================================
+
+        if (
+            error.name ===
+            "ValidationError"
+        ) {
+            const messages =
+                Object.values(
+                    error.errors || {}
+                ).map(
+                    (err) => err.message
+                );
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    messages.join(", ") ||
+                    "User information is invalid",
+            });
+        }
+
+        // ==================================================
+        // GENERAL ERROR
+        // ==================================================
 
         return res.status(500).json({
             success: false,
-            message: error.message || "Registration failed",
+            message:
+                error.message ||
+                "Registration failed",
         });
     }
 };
